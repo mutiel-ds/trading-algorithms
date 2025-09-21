@@ -1,3 +1,4 @@
+from math import e
 import numpy as np
 from pandas import DataFrame, Series
 
@@ -387,6 +388,21 @@ class FeatureEngineer:
         # Bullish/Bearish candles
         self.df['bullish_candle'] = np.where(self.df['Close'] > self.df['Open'], 1, 0)
         self.df['bearish_candle'] = np.where(self.df['Close'] < self.df['Open'], 1, 0)
+
+    # ==================== TARGET GENERATION ====================
+
+    def add_target(self, x: int = 1, threshold: float = 0.0) -> None:
+        """Add binary target variable for price direction in x days."""
+        logger.info(msg="Addint binary target variable")
+
+        if "Close" not in self.df.columns:
+            raise ValueError("DataFrame must contain a 'Close' column.")
+
+        if f"return_{x}d" not in self.df.columns:
+            self.df[f"return_{x}d"] = self.df['Close'].pct_change(periods=x)
+        
+        self.df[f"target_{x}d"] = (self.df[f"return_{x}d"] > threshold).astype(int)
+        logger.info(msg=f"Generated target variable with name 'target_{x}d'.")
     
     # ==================== AUTOMATIC FEATURE GENERATION ====================
     
@@ -399,6 +415,8 @@ class FeatureEngineer:
         volume_windows: List[int] = [5, 10, 20],
         momentum_windows: List[int] = [5, 10, 20],
         statistical_windows: List[int] = [5, 10, 20],
+        target_days: int = 1,
+        threshold: float = 0.0,
         include_candlestick: bool = True,
         return_df: bool = False, 
     ) -> Optional[DataFrame]:
@@ -413,6 +431,8 @@ class FeatureEngineer:
             volume_windows: Windows for volume calculations
             momentum_windows: Windows for momentum calculations
             statistical_windows: Windows for statistical calculations
+            target_days: Number of days to calculate target variable
+            threshold: Threshold to create binary variable
             include_candlestick: Whether to include candlestick patterns
             return_df: Whether to return the processed DataFrame.
             
@@ -446,6 +466,11 @@ class FeatureEngineer:
         # Candlestick patterns
         if include_candlestick:
             self.add_candlestick_features()
+
+        self.add_target(
+            x=target_days,
+            threshold=threshold
+        )
         
         logger.info(msg=f"Feature generation complete. Total features: {len(self.df.columns)}")
         
@@ -466,7 +491,8 @@ class FeatureEngineer:
             'Volume Features': [],
             'Statistical Features': [],
             'Candlestick Patterns': [],
-            'Price Features': []
+            'Price Features': [],
+            "Targets": []
         }
         
         for col in self.df.columns:
@@ -484,6 +510,8 @@ class FeatureEngineer:
                 feature_categories['Candlestick Patterns'].append(col)
             elif col in ['daily_range', 'close_position', 'gap_', 'intraday_momentum']:
                 feature_categories['Price Features'].append(col)
+            elif col.startswith("target_"):
+                feature_categories["Targets"].append(col)
         
         return {
             'total_features': len(self.df.columns),
